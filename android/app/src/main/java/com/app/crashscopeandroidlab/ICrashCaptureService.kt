@@ -36,12 +36,14 @@ interface ICrashCaptureService : IInterface {
 
         override fun asBinder(): IBinder = this
 
-        override fun onTransact(code: Int, data: Parcel, reply: Parcel, flags: Int): Boolean {
+        override fun onTransact(code: Int, data: Parcel?, reply: Parcel?, flags: Int): Boolean {
+            val request = data ?: return false
+            val response = reply ?: return false
             if (code == INTERFACE_TRANSACTION) {
-                reply.writeString(DESCRIPTOR)
+                response.writeString(DESCRIPTOR)
                 return true
             }
-            data.enforceInterface(DESCRIPTOR)
+            request.enforceInterface(DESCRIPTOR)
             return when (code) {
                 TRANSACTION_DESTROY -> {
                     destroy()
@@ -52,37 +54,40 @@ interface ICrashCaptureService : IInterface {
                     true
                 }
                 TRANSACTION_START -> {
-                    val result = start(data.readString().orEmpty())
-                    reply.writeNoException()
-                    reply.writeInt(if (result) 1 else 0)
+                    val result = start(request.readString().orEmpty())
+                    response.writeNoException()
+                    response.writeInt(if (result) 1 else 0)
                     true
                 }
                 TRANSACTION_STOP -> {
-                    reply.writeNoException()
-                    reply.writeString(stopAndGetReport())
+                    response.writeNoException()
+                    response.writeString(stopAndGetReport())
                     true
                 }
                 TRANSACTION_SNAPSHOT -> {
-                    reply.writeNoException()
-                    reply.writeString(getSnapshot())
+                    response.writeNoException()
+                    response.writeString(getSnapshot())
                     true
                 }
                 TRANSACTION_CLEAR -> {
                     clear()
-                    reply.writeNoException()
+                    response.writeNoException()
                     true
                 }
                 TRANSACTION_UID -> {
-                    reply.writeNoException()
-                    reply.writeInt(getUid())
+                    response.writeNoException()
+                    response.writeInt(getUid())
                     true
                 }
-                else -> super.onTransact(code, data, reply, flags)
+                else -> super.onTransact(code, request, response, flags)
             }
         }
 
         private class Proxy(private val remote: IBinder) : ICrashCaptureService {
             override fun asBinder(): IBinder = remote
+
+            override fun destroy() { transact(TRANSACTION_DESTROY) { } }
+            override fun exit() { transact(TRANSACTION_EXIT) { } }
 
             override fun start(packageName: String): Boolean = transactBoolean(TRANSACTION_START) {
                 writeString(packageName)
