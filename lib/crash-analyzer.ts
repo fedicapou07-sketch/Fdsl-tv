@@ -118,7 +118,16 @@ function firstMatch(text: string, regex: RegExp): string | undefined {
 }
 
 function findLocation(text: string): string {
-  const java = text.match(/(?:at|#\d+)\s+([\w.$]+)\(([^:)]+)(?::(\d+))?\)/);
+  const frames = [...text.matchAll(/(?:^|\s)at\s+([\w.$]+)\(([^:)]+)(?::(\d+))?\)/gm)];
+  const appFrame = frames.find((frame) => {
+    const className = frame[1] || "";
+    return !className.startsWith("android.") &&
+      !className.startsWith("java.") &&
+      !className.startsWith("javax.") &&
+      !className.startsWith("dalvik.") &&
+      !className.startsWith("com.android.");
+  });
+  const java = appFrame || frames[0];
   if (java) return `${java[1]} — ${java[2]}${java[3] ? `:${java[3]}` : ""}`;
   const smali = text.match(/(?:L[\w/$-]+;)->[\w$-]+\([^)]*\)[\w/$;]+/);
   if (smali) return smali[0];
@@ -166,10 +175,24 @@ export function analyzeCrashText(rawText: string, meta?: Partial<Pick<CrashRepor
   const device = meta?.device || extractLine(text, /(?:Model|Device)[:=]\s*([^\n\r]+)/i, "غير معروف");
   const androidVersion = meta?.androidVersion || extractLine(text, /(?:Android|SDK)[:=]\s*([^\n\r]+)/i, "غير معروف");
 
+  const processPackage = extractLine(text, /Process:\s*([^,\s\n\r]+)/i, "");
+  const reportedPackage = extractLine(text, /Package(?: Name)?[:=]\s*([^\s\n\r]+)/i, "");
+  const actualPackage = processPackage || reportedPackage || packageName;
+  if (processPackage && packageName !== "غير معروف" && processPackage !== packageName) {
+    findings.unshift({
+      id: "package-mismatch",
+      title: "اسم الحزمة المدخل لا يطابق العملية المنهارة",
+      severity: "high",
+      evidence: `الحزمة المدخلة: ${packageName} — العملية الفعلية: ${processPackage}`,
+      advice: "استخدم اسم الحزمة الظاهر في سطر Process أو Package. إذا كان التطبيق يعيد تشغيل عملية مختلفة، التقط التقرير من العملية الصحيحة.",
+      location: "Process / Package metadata",
+    });
+  }
+
   return {
     id: `report-${Date.now()}`,
     createdAt: new Date().toISOString(),
-    packageName,
+    packageName: actualPackage,
     appVersion,
     device,
     androidVersion,

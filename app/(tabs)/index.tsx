@@ -91,12 +91,12 @@ export default function HomeScreen() {
   const reportText = useMemo(() => (report ? formatReport(report) : ""), [report]);
 
   const analyze = (text: string, source: CrashReport["source"]) => {
-    const next = analyzeCrashText(text, {
+    const next = analyzeCrashText(text, source === "demo" ? {
       packageName,
       appVersion,
       device: "Samsung — يتم تحديده من التقرير",
       androidVersion: "Android 13+ — يتم تحديده من التقرير",
-    }, source);
+    } : undefined, source);
     setReport(next);
     setStatus("تم تحليل التقرير محليًا دون رفع البيانات");
   };

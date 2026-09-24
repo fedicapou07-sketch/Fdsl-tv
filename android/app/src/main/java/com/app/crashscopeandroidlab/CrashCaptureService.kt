@@ -25,11 +25,13 @@ class CrashCaptureService : ICrashCaptureService.Stub() {
             try {
                 process = Runtime.getRuntime().exec(arrayOf("logcat", "-c"))
                 process?.waitFor()
-                process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "threadtime", "-b", "main", "-b", "crash", "-b", "system"))
+                // The crash buffer contains structured crash events and avoids unrelated
+                // Samsung/SystemUI task logs that can mention the target package.
+                process = Runtime.getRuntime().exec(arrayOf("logcat", "-v", "threadtime", "-b", "crash"))
                 val reader = BufferedReader(InputStreamReader(process!!.inputStream))
                 while (running.get()) {
                     val line = reader.readLine() ?: break
-                    if (isRelevant(line)) append(line)
+                    append(line)
                 }
             } catch (ignored: Throwable) {
                 append("CrashScope capture error: ${ignored.javaClass.simpleName}: ${ignored.message}")
@@ -39,17 +41,6 @@ class CrashCaptureService : ICrashCaptureService.Stub() {
             }
         }
         return true
-    }
-
-    private fun isRelevant(line: String): Boolean {
-        return line.contains(targetPackage) ||
-            line.contains("AndroidRuntime") ||
-            line.contains("FATAL EXCEPTION") ||
-            line.contains("am_crash") ||
-            line.contains("am_anr") ||
-            line.contains("SIGSEGV") ||
-            line.contains("Fatal signal") ||
-            line.contains("CRASH")
     }
 
     private fun append(line: String) {
