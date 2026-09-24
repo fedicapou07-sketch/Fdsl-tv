@@ -36,8 +36,8 @@ interface ICrashCaptureService : IInterface {
 
         override fun asBinder(): IBinder = this
 
-        override fun onTransact(code: Int, data: Parcel?, reply: Parcel?, flags: Int): Boolean {
-            val request = data ?: return false
+        override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+            val request = data
             val response = reply ?: return false
             if (code == INTERFACE_TRANSACTION) {
                 response.writeString(DESCRIPTOR)
