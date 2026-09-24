@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
+  NativeModules,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -83,6 +85,7 @@ export default function HomeScreen() {
   const [packageName, setPackageName] = useState("com.example.player");
   const [appVersion, setAppVersion] = useState("غير محدد");
   const [isCapturing, setIsCapturing] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState("جسر Android غير مفحوص");
   const [status, setStatus] = useState("جاهز لفحص تطبيق مصرح به");
 
   const reportText = useMemo(() => (report ? formatReport(report) : ""), [report]);
@@ -142,9 +145,46 @@ export default function HomeScreen() {
     await Share.share({ title: "CrashScope Debug Report", message: reportText });
   };
 
-  const toggleCapture = () => {
-    setIsCapturing((value) => !value);
-    setStatus(isCapturing ? "توقفت جلسة الالتقاط — استورد logcat لتحليله" : "جلسة الالتقاط جاهزة؛ شغّل التطبيق المستهدف ثم استورد التقرير");
+  const toggleCapture = async () => {
+    if (isCapturing) {
+      const native = NativeModules.CrashScopeNative as { stopCapture?: () => Promise<string> } | undefined;
+      const rawReport = await native?.stopCapture?.();
+      setIsCapturing(false);
+      if (rawReport?.trim()) {
+        analyze(rawReport, "imported");
+      } else {
+        setStatus("توقفت جلسة الالتقاط — لم تصل أسطر Crash مطابقة للحزمة");
+      }
+      return;
+    }
+    if (Platform.OS !== "android") {
+      setStatus("التقاط الجهاز متاح داخل APK Android فقط");
+      return;
+    }
+    const native = NativeModules.CrashScopeNative as {
+      getBridgeStatus?: () => Promise<{ canStartCapture: boolean; transport: string; permissionGranted: boolean }>;
+      requestShizukuPermission?: () => Promise<boolean>;
+      startCapture?: (targetPackage: string) => Promise<boolean>;
+    } | undefined;
+    if (!native?.getBridgeStatus) {
+      setStatus("نسخة التطوير الحالية لا تحتوي على جسر Android الأصلي");
+      return;
+    }
+    const current = await native.getBridgeStatus();
+    if (!current.permissionGranted) {
+      setBridgeStatus(current.transport === "unavailable" ? "Shizuku غير متصل" : "Shizuku يحتاج موافقة");
+      await native.requestShizukuPermission?.();
+      setStatus("امنح CrashScope صلاحية Shizuku ثم اضغط بدء جلسة مرة أخرى");
+      return;
+    }
+    setBridgeStatus(`Shizuku متصل عبر ${current.transport}`);
+    const started = await native.startCapture?.(packageName);
+    if (!started) {
+      setStatus("تعذر بدء خدمة الالتقاط؛ تحقق من صلاحية Shizuku ثم أعد المحاولة");
+      return;
+    }
+    setIsCapturing(true);
+    setStatus(`جلسة التقاط حقيقية للحزمة ${packageName} — افتح التطبيق المستهدف ثم أعده للتحليل`);
   };
 
   return (
@@ -213,6 +253,7 @@ export default function HomeScreen() {
         <View style={styles.noteCard}>
           <Text style={styles.noteTitle}>ملاحظة التشغيل</Text>
           <Text style={styles.noteText}>{status}</Text>
+          <Text style={styles.noteSubtext}>{bridgeStatus}</Text>
           <Text style={styles.noteSubtext}>لا يقرأ CrashScope كلمات المرور أو محتوى التطبيقات؛ ويحلل فقط الملف الذي تختاره أو السجلات التي تمنحها صراحة.</Text>
         </View>
 
