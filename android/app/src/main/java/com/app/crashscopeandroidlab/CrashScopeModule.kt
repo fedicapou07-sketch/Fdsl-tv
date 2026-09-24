@@ -28,9 +28,10 @@ class CrashScopeModule(private val context: ReactApplicationContext) : ReactCont
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             captureService = if (binder?.pingBinder() == true) ICrashCaptureService.Stub.asInterface(binder) else null
             val start = pendingStart
-            if (start != null && captureService != null) {
+            val service = captureService
+            if (start != null && service != null) {
                 try {
-                    val started = captureService!!.start(start.first)
+                    val started = service.start(start.first)
                     pendingStart = null
                     start.second.resolve(started)
                 } catch (error: Throwable) {
@@ -100,8 +101,9 @@ class CrashScopeModule(private val context: ReactApplicationContext) : ReactCont
                 promise.reject("SHIZUKU_NOT_AUTHORIZED", "Grant Shizuku permission first")
                 return
             }
-            if (captureService != null) {
-                promise.resolve(captureService!!.start(packageName))
+            val service = captureService
+            if (service != null) {
+                promise.resolve(service.start(packageName))
                 return
             }
             pendingStart = packageName to promise
